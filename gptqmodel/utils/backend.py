@@ -58,6 +58,9 @@ class BACKEND(str, Enum):
     EXL3_EXLLAMA_V3 = "exl3_exllama_v3"
     EXL3_TORCH = "exl3_torch"
 
+    # EXLLAMA EORA
+    EXLLAMA_EORA = "exllama_eora"
+
     # external engines
     VLLM = "vllm"
     SGLANG = "sglang"

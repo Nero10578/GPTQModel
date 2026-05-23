@@ -9,6 +9,9 @@ from .deepseek_v3 import DeepSeekV3QModel
 class DeepSeekV4QModel(DeepSeekV3QModel):
     dynamic_expert_index = "n_routed_experts"
     rotary_embedding = "model.rotary_emb"
+    layer_modules_strict = False
+    support_offload_to_disk = False
+
     module_tree = [
         "model",
         "layers",

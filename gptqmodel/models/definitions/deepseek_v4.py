@@ -20,15 +20,13 @@ class DeepSeekV4QModel(DeepSeekV3QModel):
         additional_inputs,
         target_device,
     ):
-        from ..utils.model import move_to
-
         pe = additional_inputs.pop("position_embeddings", None)
         if pe is not None:
             moved = {}
             for k, (cos, sin) in pe.items():
                 moved[k] = (
-                    move_to(cos, device=target_device),
-                    move_to(sin, device=target_device),
+                    cos.to(device=target_device),
+                    sin.to(device=target_device),
                 )
             additional_inputs["position_embeddings"] = moved
         return additional_inputs

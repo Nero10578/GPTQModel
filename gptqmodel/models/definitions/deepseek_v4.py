@@ -7,8 +7,22 @@ from .deepseek_v3 import DeepSeekV3QModel
 
 
 class DeepSeekV4QModel(DeepSeekV3QModel):
+    # DeepSeek-V4 Flash uses a custom rotary embedding with per-layer-type
+    # inv_freq buffers. These must be materialized to the quant device
+    # before the calibration forward pass, otherwise `apply_rotary_pos_emb`
+    # fails with a cuda:0 / cpu device mismatch.
+    require_fast_init = False
+
     dynamic_expert_index = "n_routed_experts"
     rotary_embedding = "model.rotary_emb"
+
+    def pre_quantize_generate_hook_start(self):
+        self.shell_module_materialize(self.model.embed_tokens, self.quantize_config.device)
+        self.shell_module_materialize(self.model.rotary_emb, self.quantize_config.device)
+        hc_head = getattr(self.model, "hc_head", None)
+        if hc_head is not None:
+            self.shell_module_materialize(hc_head, self.quantize_config.device)
+
     module_tree = [
         "model",
         "layers",

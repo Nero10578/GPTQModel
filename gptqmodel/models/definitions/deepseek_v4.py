@@ -17,9 +17,10 @@ class DeepSeekV4QModel(DeepSeekV3QModel):
     rotary_embedding = "model.rotary_emb"
 
     def pre_quantize_generate_hook_start(self):
-        self.shell_module_materialize(self.model.embed_tokens, self.quantize_config.device)
-        self.shell_module_materialize(self.model.rotary_emb, self.quantize_config.device)
-        hc_head = getattr(self.model, "hc_head", None)
+        inner = self.model.model
+        self.shell_module_materialize(inner.embed_tokens, self.quantize_config.device)
+        self.shell_module_materialize(inner.rotary_emb, self.quantize_config.device)
+        hc_head = getattr(inner, "hc_head", None)
         if hc_head is not None:
             self.shell_module_materialize(hc_head, self.quantize_config.device)
 

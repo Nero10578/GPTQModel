@@ -1,28 +1,37 @@
-# SPDX-FileCopyrightText: 2026 ModelCloud.ai
-# SPDX-FileCopyrightText: 2026 qubitium@modelcloud.ai
-# SPDX-License-Identifier: Apache-2.0
-# Contact: qubitium@modelcloud.ai, x.com/qubitium
-
 from .deepseek_v3 import DeepSeekV3QModel
 
 
 class DeepSeekV4QModel(DeepSeekV3QModel):
     # DeepSeek-V4 Flash uses a custom rotary embedding with per-layer-type
-    # inv_freq buffers. These must be materialized to the quant device
-    # before the calibration forward pass, otherwise `apply_rotary_pos_emb`
-    # fails with a cuda:0 / cpu device mismatch.
+    # inv_freq buffers and passes position_embeddings as a nested dict of
+    # tuples to each decoder layer. The default nested_move_to does not
+    # recurse into dicts, so cos/sin tensors inside position_embeddings
+    # stay on CPU during layer replay. Override prepare_layer_replay_kwargs
+    # to materialize them onto the target device.
     require_fast_init = False
 
     dynamic_expert_index = "n_routed_experts"
     rotary_embedding = "model.rotary_emb"
 
-    def pre_quantize_generate_hook_start(self):
-        inner = self.model.model
-        self.shell_module_materialize(inner.embed_tokens, self.quantize_config.device)
-        self.shell_module_materialize(inner.rotary_emb, self.quantize_config.device)
-        hc_head = getattr(inner, "hc_head", None)
-        if hc_head is not None:
-            self.shell_module_materialize(hc_head, self.quantize_config.device)
+    def prepare_layer_replay_kwargs(
+        self,
+        layer,
+        layer_input,
+        additional_inputs,
+        target_device,
+    ):
+        from ..utils.model import move_to
+
+        pe = additional_inputs.pop("position_embeddings", None)
+        if pe is not None:
+            moved = {}
+            for k, (cos, sin) in pe.items():
+                moved[k] = (
+                    move_to(cos, device=target_device),
+                    move_to(sin, device=target_device),
+                )
+            additional_inputs["position_embeddings"] = moved
+        return additional_inputs
 
     module_tree = [
         "model",

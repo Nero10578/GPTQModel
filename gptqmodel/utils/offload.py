@@ -17,8 +17,6 @@ import torch
 from accelerate import disk_offload
 from accelerate.hooks import remove_hook_from_module, remove_hook_from_submodules
 from accelerate.utils import align_module_device, has_offloaded_params
-from accelerate.utils import modeling as _acc_modeling
-import accelerate.hooks as _acc_hooks
 from safetensors.torch import save_file as safetensors_save_file
 from torch import nn
 
@@ -208,44 +206,12 @@ def _offload_disk_locked(module: nn.Module, name: str, disk_path: str = "."):
     _prepare_offload_directory(module_offload_dir)
     _bundle_module_state_dict(module, module_offload_dir)
 
-    # accelerate.disk_offload(offload_buffers=True) iterates the module's raw
-    # `_buffers`/`_parameters` dicts, which retain None-valued placeholders
-    # (e.g. BaseQuantLinear registers `had_K = None`; bias-less QuantLinear
-    # sets `self.bias = None`). This accelerate build's
-    # set_module_tensor_to_device raises on a None value (`old_value.device`)
-    # and also raises when a name it tries to move is absent. Both failure
-    # modes are spurious: None entries hold no tensor data to offload.
-    # Temporarily wrap set_module_tensor_to_device to skip None/missing tensors
-    # for the duration of the disk_offload call only.
-    # NOTE: accelerate.hooks binds this function by name at import time, so the
-    # bound reference in accelerate.hooks must be patched in addition to the
-    # canonical one in accelerate.utils.modeling.
-    _orig_set_module_tensor_to_device = _acc_modeling.set_module_tensor_to_device
-
-    def _skip_none_set_tensor(module_, tensor_name, device, *args, **kwargs):
-        src = (
-            module_._buffers.get(tensor_name, "missing")
-            if tensor_name in module_._buffers
-            else module_._parameters.get(tensor_name, "missing")
-        )
-        if src in (None, "missing"):
-            return
-        return _orig_set_module_tensor_to_device(
-            module_, tensor_name, device, *args, **kwargs
-        )
-
-    _acc_modeling.set_module_tensor_to_device = _skip_none_set_tensor
-    _acc_hooks.set_module_tensor_to_device = _skip_none_set_tensor
-    try:
-        _ = disk_offload(
-            module,
-            offload_dir=module_offload_dir,
-            offload_buffers=True,
-            execution_device=m_device,
-        )
-    finally:
-        _acc_modeling.set_module_tensor_to_device = _orig_set_module_tensor_to_device
-        _acc_hooks.set_module_tensor_to_device = _orig_set_module_tensor_to_device
+    _ = disk_offload(
+        module,
+        offload_dir=module_offload_dir,
+        offload_buffers=True,
+        execution_device=m_device,
+    )
 
     # print("offload_disk: list item tree")
     # print_module_tree(module)

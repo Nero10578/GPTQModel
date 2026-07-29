@@ -126,7 +126,12 @@ class BaseQuantLinear(nn.Module):
         self.online_partial_had = False
         self.had_dim = -1
         self.K = 1
-        self.register_buffer("had_K", None, persistent=False)
+        # Plain attribute (NOT register_buffer): a None-valued buffer entry in
+        # `_buffers` breaks accelerate.disk_offload(offload_buffers=True), which
+        # iterates raw `_buffers` and trips on `old_value.device` of None. The
+        # loader upgrades this to a real buffer via register_buffer only when
+        # rotation is actually configured (see loader.py).
+        self.had_K = None
 
         validate_args = {
             "bits": bits,

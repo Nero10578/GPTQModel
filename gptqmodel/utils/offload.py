@@ -8,7 +8,7 @@ import json
 import os
 import shutil
 import struct
-from typing import Iterable, List, Optional, Set, Tuple
+from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 import accelerate
 import torch
@@ -206,12 +206,32 @@ def _offload_disk_locked(module: nn.Module, name: str, disk_path: str = "."):
     _prepare_offload_directory(module_offload_dir)
     _bundle_module_state_dict(module, module_offload_dir)
 
-    _ = disk_offload(
-        module,
-        offload_dir=module_offload_dir,
-        offload_buffers=True,
-        execution_device=m_device,
-    )
+    # accelerate.disk_offload(offload_buffers=True) walks the module's raw
+    # `_buffers`/`_parameters` dicts, which retain None-valued placeholders
+    # (e.g. BaseQuantLinear registers `had_K = None` and sets `self.bias = None`
+    # for bias-less layers). None entries carry no tensor data to offload but
+    # trip `old_value.device` in set_module_tensor_to_device. Temporarily move
+    # them aside so accelerate skips them, then restore the originals.
+    masked_buffers: Dict[str, None] = {}
+    for n in list(module._buffers.keys()):
+        if module._buffers.get(n, "missing") is None:
+            masked_buffers[n] = module._buffers.pop(n)
+
+    masked_params: Dict[str, None] = {}
+    for n in list(module._parameters.keys()):
+        if module._parameters.get(n, "missing") is None:
+            masked_params[n] = module._parameters.pop(n)
+
+    try:
+        _ = disk_offload(
+            module,
+            offload_dir=module_offload_dir,
+            offload_buffers=True,
+            execution_device=m_device,
+        )
+    finally:
+        module._buffers.update(masked_buffers)
+        module._parameters.update(masked_params)
 
     # print("offload_disk: list item tree")
     # print_module_tree(module)

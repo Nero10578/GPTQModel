@@ -3,6 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Contact: qubitium@modelcloud.ai, x.com/qubitium
 
+import torch
+
 from ..moe_lifecycle import GateUpDownMoELifecycleHooks
 from .base_qwen3_vl import BaseQwen3VLGPTQ
 
@@ -12,6 +14,13 @@ class Qwen3VLMoeQModel(BaseQwen3VLGPTQ):
     # model. Inherits VL loading/processor/hooks + `model.language_model.layers`
     # prefix from BaseQwen3VLGPTQ, and only swaps the dense MLP tree for the MoE
     # expert tree. This model has NO shared expert.
+
+    # Force calibration inputs onto the quant device (cuda) for every batch.
+    # Without this, text-only batches (no pixel_values) land on `cur_layer_device`
+    # which is CPU during input capture, while embed_tokens is materialized to
+    # cuda by pre_quantize_generate_hook_start -> embedding device mismatch.
+    ATTENTION_MASKS_REQUIRED_FOR_INPUT = True
+    ATTENTION_MASKS_DTYPE = torch.long
 
     # expand `mlp.experts.#` to `mlp.experts.0..num_experts-1` automatically
     dynamic_expert_index = "num_experts"

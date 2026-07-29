@@ -90,6 +90,7 @@ from .qwen2_vl import Qwen2VLQModel
 from .qwen3 import Qwen3QModel
 from .qwen3_moe import Qwen3MoeQModel
 from .qwen3_vl import Qwen3_VLQModel
+from .qwen3_vl_moe import Qwen3VLMoeQModel
 from .rw import RwgQModel
 from .solar_open import SolarOpenQModel
 from .solar_open2 import SolarOpen2QModel
